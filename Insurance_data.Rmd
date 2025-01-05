@@ -1,0 +1,585 @@
+---
+title: "Insurance data"
+author: "Chandanarchutha Namburu"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+### Project Aim 
+
+The project aims to estimate the difference in cost of personal insurance for individuals based on various factors such as age , gender, BMI, and smoking habits.
+
+
+## **Data collection** 
+
+We obtained secondary data from Kaggle about information about individuals demographics and health/practice information and cost of personal insurance.We imported the CSV file into R for data cleaning and analysis. 
+
+Loading the data from CSV file:
+
+```{r}
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(mosaic)
+library(broom)
+library(boot)
+```
+
+
+```{r}
+
+#specifying the path 
+
+path <- "insurance.csv"
+  
+data <- read_csv(path, col_names = TRUE) 
+  
+# contents of the csv file 
+print (data)
+
+```
+
+Checking the structure of the data set,we used inbuilt str() function:
+
+```{r}
+str(data)
+```
+
+We got a summary statistic of the data set using summary function
+
+```{r}
+
+summary(data)
+
+```
+
+The summary statistics gives a clear picture of the data set . 
+
+**Population** 
+
+As summarized, the population comprises of 662 females and 676 males in the age range of 18- 64. 
+
+**Variables**
+The total data set contains 1338 observation and 7 variables ( Numerical and categorical).
+
+The categorical variables are 
+1. Sex
+2. Smoking status
+3. Region
+
+The Numerical variables include:
+1. Age 
+2. BMI
+3. Charges
+
+
+The mean age for the population is 39.21, mean BMI is 30.66, while the mean insurance cost is 13270 dollars.
+
+## **Data cleaning** 
+
+Tidyverse was used in inspecting the data set , with regard to its structure, missing values and completeness.
+
+We loaded the libraries and tools required for cleaning like tidyverse and dplyr
+
+```{r}
+library(tidyverse)
+library(dplyr)
+```
+
+Determined the variable type using the inbuilt function Glimpse. 
+
+```{r}
+glimpse(data)
+```
+
+Next we checked for completeness and NA values 
+
+```{r}
+#finding missing values
+data %>% 
+    filter(!complete.cases(.))
+```
+
+The above result indicate that their are no missing values. we can double check by following R code
+
+```{r}
+#check for missing values
+
+which(is.na(data$age))
+
+which(is.na(data$sex))
+
+which(is.na(data$bmi))
+
+which(is.na(data$smoker))
+
+which(is.na(data$charges))
+```
+*Checking for duplicates*
+
+We checked the data for duplicate values and found 1 value 
+```{r}
+duplicated_rows <- data[duplicated(data), ]
+duplicated_rows
+```
+
+## **Analysis**
+
+**Insurance Charge Vs. Smoking Status**
+
+
+```{r}
+
+smoker_insur<-data$charges[data$smoker=="yes"]
+nonsmoker_insur<-data$charges[data$smoker=="no"]
+
+smokers_df <- subset(data, smoker=="yes")
+nonsmokers_df <-subset(data,smoker == "no")
+```
+
+**Null Hypothesis , H0**: The average value of smoker and nonsmoker data charge is the same.
+
+**Alternate Hypothesis, H1**:The average value of smoker and nonsmoker data charge isn't the same.
+
+```{r}
+t.test(smoker_insur,nonsmoker_insur,alternative="two.sided")
+```
+
+As we can see from the output, the p-value is way less than 0.05 therefore, we have extreme evidence against the null hypothesis. We can reject the null hypothesis and concldue that the insurance charge for smoker and nonsoker isn't equal
+
+```{r}
+boxplot(data$charges~data$smoker, main="Insurance charges vs smoking", ylab="Insurance charges", xlab="Smoker or not")
+```
+**Bootstrap Distribution**  
+
+```{r}
+smokers = do(1000)*mean(resample(smokers_df$charges, replace = TRUE, na.rm = TRUE))
+nonsmokers = do(1000)*mean(resample(nonsmokers_df$charges, replace = TRUE, na.rm = TRUE))
+mean_diff = smokers-nonsmokers
+UL = quantile(mean_diff$mean, 0.975)
+LL = quantile(mean_diff$mean, 0.025)
+ggplot(mean_diff, aes(x=mean)) + 
+  geom_histogram(col=4, fill=4, na.rm=TRUE) + 
+  xlab("Sample Mean Difference between smokers and nonsmokers") + ylab("Frequency") + 
+  ggtitle("Distribution of sample mean Difference for smoker and nonsmoker insurance")+
+  geom_vline(xintercept = UL, color = "red") + 
+  geom_vline(xintercept = LL, color = "red")
+
+#UL = quantile(mean_diff$mean, 0.975)
+#LL = quantile(mean_diff$mean, 0.025)
+cat("95% bootstrap confidence interval for difference in 
+    population mean is (", LL, ",", UL, ")")
+```
+**Insurance Charge Vs. Age**
+
+**Inspect summary statistics for numeric columns**
+ 
+```{r}
+summary(data[, c("age", "bmi", "charges")])
+```
+
+**Visualization :**
+
+```{r}
+#grouping the Age
+data$age_group <- ifelse(data$age <= 41, "18-41", "42-64")
+
+# the average charges for each age group
+average_charges <- data %>%
+  group_by(age_group) %>%
+  summarise(mean_charges = mean(charges, na.rm = TRUE))
+
+# bar plot to show average charges by age group
+ggplot(average_charges, aes(x = age_group, y = mean_charges, fill = age_group)) +
+  geom_bar(stat = "identity", width = 0.6) +  # Bar plot
+  geom_text(aes(label = round(mean_charges, 2)), vjust = -0.5) +  
+  labs(title = "Average Charges by Age Group",
+       x = "Age Group",
+       y = "Average Charges") +
+  theme_minimal() +
+  scale_fill_manual(values = c("lightblue", "lightcoral")) +
+  theme(legend.position = "none")  
+```
+
+As the "42-64" age group has a significantly taller bar compared to the "18-41" age group with avg charges as 16936.65 and 10210.22 respectively, it indicates that older individuals tend to incur higher charges on average.
+
+
+**HYPOTHESIS TESTING**
+
+**1. Test 4 between age and charges**
+
+We want to test whether there is a significant difference in the average medical charges between two age groups: 
+
+- **Group 1**: Ages 18 to 41
+
+- **Group 2**: Ages 42 to 64
+
+*the Hypotheses*
+
+- **Null Hypothesis (H0)**: There is no difference in the average medical charges between the two age groups.
+
+- **Alternative Hypothesis (H1)**: There is a significant difference in the average medical charges between the two age groups.
+
+
+*Performing t-test*
+
+```{r}
+#t-test
+t_test_result <- t.test(charges ~ age_group, data = data)
+t_test_result
+```
+
+**Observation :**
+
+**t-value: -10.497** : the larger the value the stronger evidence against the null hypothesis.
+
+**p-value: < 2.2e-16** : as p < 0.5 , we reject the null hypothesis.
+
+**95% Confidence Interval: [-7983.515, -5469.360]** : This interval suggests that the mean charges for the group 42-64 are higher by about *$5,469.36 to $7,983.52* compared to group 18-41.
+
+**Mean in group 18–41: $10,210.22** and **Mean in group 42–64: $16,936.65**
+
+individuals in the 42–64 age group incur significantly higher medical charges compared to those in the 18–41 age group.
+
+overall, This could be due to increased medical needs or more frequent healthcare utilization as age increases.
+
+
+
+```{r}
+# Density plot for charges by age group
+ggplot(data, aes(x = charges, fill = age_group)) +
+  geom_density(alpha = 0.6) +
+  labs(title = "Density Plot of Charges by Age Group",
+       x = "Charges",
+       y = "Density") +
+  theme_minimal()
+```
+**Bootstrap Confidence Interval **
+
+```{r}
+group1 <- subset(data, age >= 18 & age <= 41)$charges
+group2 <- subset(data, age > 41 & age <= 64)$charges
+
+n_boot <- 1000
+
+bootstrap_diff <- numeric(n_boot)
+
+set.seed(123)  
+for (i in 1:n_boot) {
+  resample1 <- sample(group1, size = length(group1), replace = TRUE)
+  resample2 <- sample(group2, size = length(group2), replace = TRUE)
+  
+  bootstrap_diff[i] <- mean(resample2) - mean(resample1)
+}
+ci_lower <- quantile(bootstrap_diff, 0.025)
+ci_upper <- quantile(bootstrap_diff, 0.975)
+
+cat("95% Bootstrap Confidence Interval for the difference in charges: [", ci_lower, ", ", ci_upper, "]\n")
+```
+
+**Visualization**
+
+```{r}
+hist(bootstrap_diff, freq = TRUE, col = rgb(0.2, 0.7, 0.3, 0.5),
+     main = "Bootstrap Distribution of Mean Charges Difference (Age 42-64 - Age 18-41)",
+     xlab = "Difference in Mean Charges", ylab = "Frequency", breaks = 30)
+
+abline(v = quantile(bootstrap_diff, c(0.025, 0.975)), col = "red", lty = 2)
+
+legend("topright", legend = c("95% CI"), col = "red", lty = 2)
+```
+
+The 95% confidence interval for the difference in mean charges is (5507, 8055).
+Individuals in the age group 42-64 tend to have average charges that are between *$5,467* and *$7,977* higher than those in the age group 18-41.
+the bootstrap confidence interval results substantiate the findings of my t-test
+
+**Insurance Charge Vs. Gender**
+
+```{r}
+
+library(dplyr)
+library(ggplot2)
+
+```
+
+**Hypothesis Testing**
+
+**Sex vs Charges**
+
+
+**Null hypothesis , $H_0$** :   There is no significant difference in the mean insurance charges between males and females. 
+
+$$
+H_0: \mu_{male} = \mu_{female}
+$$
+**Alternate Hypothesis , $H_1$** : There is a significant difference in the mean charges between males and females.
+
+
+
+$$
+H_1: \mu_{male} \neq \mu_{female}
+$$
+**Performing t test**
+```{r}
+
+t_test_result <- t.test(charges ~ sex, data = data, alternative = "two.sided")
+print(t_test_result)
+
+```
+The test shows that the average insurance charges for males *($13956.75)* are significantly higher than those for females *($12569.58)*, indicating that males pay more on average for insurance.
+
+The p-value from t-test is less than 0.05, so we reject the null hypothesis. This indicates that there is a statistically significant difference in mean insurance charges between males and females.
+
+
+It is important to note that p-value is close to the threshold, so the difference may be significant but it may not represent an extremely strong effect. the difference, while present is not overwhelmingly large, and any small variations in data could potentially affect the outcome.to strongly reject the null hypothesis, a larger sample size would be beneficial. 
+
+However, when bootstrapping is applied, we generate a much larger number of samples through re-sampling. if the result from bootstrapping are consistent with the t-test, then we can confidently reject our null hypothesis. 
+
+**Box plot visualization**
+
+```{r}
+ggplot(data, aes(x = sex, y = charges, fill = sex)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of Charges by Sex", y = "Charges") +
+  theme_minimal()
+
+
+```
+
+The variability suggests that the charges for males are more spread out, indicating a wider range of insurance costs. while the means differ significantly, Interestingly, median insurance charges are the same for both groups
+
+**Outliers**: These outliers represent natural variability in the sample.these may result from high risk factors such as severe health conditions or more advanced insurance coverage. while they affect the mean charges, they are kept in the data set as they represent real world scenarios.
+
+
+**Confidence interval**
+
+**Sex vs Charges**:
+
+**Bootstrapping confidence interval**:
+
+```{r}
+
+male_data = data[data$sex == "male", ]
+female_data = data[data$sex == "female", ]
+
+observed_difference = mean(male_data$charges) - mean(female_data$charges)
+
+number_of_bootstraps = 2000
+bootstrap_difference = numeric(number_of_bootstraps)
+
+set.seed(3)
+
+for (i in 1:number_of_bootstraps) {
+  
+  male_boot = sample(male_data$charges, size = nrow(male_data), replace = TRUE)
+  
+  female_boot  = sample(female_data$charges, size = nrow(female_data),  replace = TRUE)
+  
+  bootstrap_difference[i] = mean(male_boot) - mean(female_boot)
+  
+}
+
+ci_lower = quantile(bootstrap_difference, 0.025)
+ci_upper = quantile(bootstrap_difference, 0.975)
+
+cat(ci_lower, ci_upper)
+
+```
+
+```{r}
+
+bootstrap_data = data.frame(bootstrap_difference)
+
+ggplot(bootstrap_data, aes(x = bootstrap_difference)) +
+  geom_histogram(bins = 30, fill = "lightblue", color = "black", alpha = 0.7) +  # Frequency histogram
+  geom_vline(xintercept = ci_lower, color = "red", linetype = "dashed", size = 1) +
+  geom_vline(xintercept = ci_upper, color = "red", linetype = "dashed", size = 1) +
+  ggtitle("Bootstrap Distribution of Mean Differences (Male - Female)") +
+  xlab("Mean Difference in Charges (Male - Female)") +
+  ylab("Frequency") +  # Label y-axis as frequency
+  theme_minimal() +
+  annotate("text", x = ci_lower, y = 0.9 * max(table(cut(bootstrap_data$bootstrap_difference, breaks=30))), 
+           label = paste("CI Lower:", format(round(ci_lower, 3), nsmall = 2)), hjust = 1.2, color = "red") +
+  annotate("text", x = ci_upper, y = 0.9 * max(table(cut(bootstrap_data$bootstrap_difference, breaks=30))), 
+           label = paste("CI Upper:", format(round(ci_upper, 3), nsmall = 2)), hjust = -0.2, color = "red")
+
+
+```
+
+The confidence interval for the difference is shown by the red dashed lines, ranging from 99.59 to 2625.96. This interval does not include zero, providing strong evidence that the average charges for males are higher than for females, which supports our results from our hypothesis testing on sex vs charges. 
+
+The consistency between the t-test and the bootstrap results allows us to confidently conclude that there is a meaningful difference in mean insurance charges between the two groups.
+
+## **BMI and Cost of personal Insurance**
+
+**Null hypothesis , $H_0$** :  The BMI has no effect on the personal insurance cost  
+**Alternate Hypothesis , $H_1$** : The BMI effects personal insurance cost
+
+According to WHO , following is the classification for WHO BMI cutoffs:
+
+Severely underweight - BMI less than 16.5
+Underweight - BMI under 18.5 
+Normal weight - BMI greater than or equal to 18.5 to 24.9
+Overweight – BMI greater than or equal to 25 to 29.9 
+Obesity – BMI greater than or equal to 30 
+Obesity class I – BMI 30 to 34.9 
+Obesity class II – BMI 35 to 39.9 
+Obesity class III – BMI greater than or equal to 40 
+
+
+The normal range for BMI for an healthy adult is between 18.5 to 24.9. For the ease of analysis , we classified all others as at risk, as we believe they are at higher risk of developing health issues as compared to the individuals in the normal BMI range. Thus, We divided the entire data into 2 subsets. 
+
+1. BMI normal: In the range ( 18.5-24.9)
+2. BMI at risk: above and below the normal range. 
+
+Accordingly, we filtered the data set into individuals who have a normal BMI. Following R code was used.
+
+```{r}
+bmi_normal <- data %>%                             
+  dplyr::filter(dplyr::between(bmi, 18.5, 24.9))
+bmi_normal  
+```
+
+A total of 222 individuals were included in the BMI normal subset. The table depicts the distribution along with all other 7 attributes. 
+
+Similarly, we filtered the data set into individuals who have a BMI at risk. Following R code was used:
+
+```{r}
+bmi_atrisk <- subset(data, data$bmi < 18.5 |data$bmi > 24.9)
+bmi_atrisk
+```
+
+A total of 1116 individuals were included in the BMI normal subset. The table depicts the distribution along with all other 7 attributes.
+
+```{r}
+# Sample data in a data frame
+data <- data.frame(
+  value = c(bmi_normal$bmi, bmi_atrisk$bmi),
+  group = rep(c("BMI Normal", "BMI At Risk"), times = c(length(bmi_normal$bmi), length(bmi_atrisk$bmi)))
+)
+
+```
+
+Following R code shows the box plot for insurance cost for individuals in the normal Range of BMI in the data subset: 
+
+```{r}
+# Sample data in a data frame
+data <- data.frame(
+  value = c(bmi_normal$charges, bmi_atrisk$charges),
+  group = rep(c("BMI Normal", "BMI At Risk"), times = c(length(bmi_normal$charges), length(bmi_atrisk$charges)))
+)
+
+# Create side-by-side box plots
+ggplot(data, aes(x = group, y = value, fill = group)) +
+  geom_boxplot() +
+  labs(title = "Insurance cost for Indivisuals in Normal BMI range and At risk ", x = "", y = "Insurance cost") +
+  theme_minimal()
+```
+
+**Summary statistics for the two subsets (BMI in Normal Range and At risk )**
+
+```{r}
+summary_normal <- favstats(~bmi_normal$charges, data = bmi_normal)
+summary_atrisk <- favstats(~bmi_atrisk$charges , data = bmi_atrisk )
+summary_normal
+summary_atrisk
+```
+
+Calculate t test between the insurance cost in 2 subsets (BMI Normal and BMI at Risk )
+
+```{r}
+t_test <-t.test(bmi_normal$charges, bmi_atrisk$charges ,alternative = "two.sided")
+
+t_test
+```
+
+```{r}
+# Create a data frame
+#Combine data into a data frame for ggplot2
+data <- data.frame(
+  value = c(bmi_normal$charges, bmi_atrisk$charges),
+  group = factor(rep(c("BMI_NORMAL", "BMI_ATRISK"), c(length(bmi_normal$charges), length(bmi_atrisk$charges))))
+)
+
+#Create histograms
+hist(bmi_normal$charges, main = "Histogram of BMI normal", xlab = "Insurance Cost", col = "blue", breaks = 10)
+hist(bmi_atrisk$charges, main = "Histogram of BMI at risk", xlab = "Insurance Cost", col = "red", breaks = 10)
+
+ggplot(data, aes(x = value, fill = group)) +
+  geom_histogram(position = "identity", alpha = 0.5, bins = 10) +
+  scale_fill_manual(values = c("pink", "blue")) +
+  labs(title = "Histograms of Charges in subsets with BMI in Normal and At risk levels",
+       x = "Insurance cost",
+       y = "No of indivisuals") +
+  theme_minimal()
+```
+
+## **RESULTS**
+The test result indicate a significant difference between the insurance charges in both subsets ( BMI Normal and BMI At Risk), the mean of personal insurance cost for individuals having normal BMI levels (18.5 -24.9 , as per WHO classification), is significantly lower (10379.5 ) than the mean cost for the people who have normal BMI , stating that they might be at risk for developing health problems (13845.5).
+
+**t statistics**
+
+The higher absolute value of t statistics indicate great difference in variability of the two groups while the negative sign indicate that the mean values in subset with BMI levels in the normal range is lower than the mean values of insurance cost in the subset with BMI in at risk group. 
+
+**p-value**
+
+Also smaller p value than the .05 significance level , the difference in means of insurance cost is significant and is unlikely due to random chance.
+
+**Confidence interval**
+The confidence interval for the difference in means is between -4707.298 and -2224.669. This range does not include 0,  supporting that there is a significant difference between the means.  Also, the negative bounds at both end signifies that the difference in insurance cost for BMI in normal group is consistently lower than the other group. 
+
+Similar is described in the histograms plotted above which shows a significant difference in cost of personal insurance with a high cost for individuals with BMI at risk ( higher than the normal range).
+
+**Conclusion**
+Thus, we can predict with 95 % confidence that the difference in insurance cost in the two subsets is significant and as the p value is less than .05 , we reject the null hypothesis and accept that alternate hypothesis. The cost of insurance is different for both groups.
+
+**Checking normality of the distribution**
+
+To check the normality of the distribution we made a QQ plot. 
+
+```{r}
+qqplot(bmi_normal$charges, bmi_atrisk$charges, main = "Q-Q Plot of insurance cost of BMI normal and BMI at risk groups")
+abline(0, 1, col = "red") 
+```
+When data is non normal or has outliers, creating a bootstrap distribution is useful, as it does not assumes as specific distribution and provide more accurate reflection of variability. 
+
+To create a distribution of the bootstrap statistic and to visualize the results we used the following R code:
+
+```{r}
+#creating a bootstrap distribution
+
+bmi_normal_mean <- do(1000)*mean(resample(bmi_normal$charges, replace = TRUE, na.rm = TRUE))
+
+bmi_atrisk_mean <- do(1000)*mean(resample(bmi_atrisk$charges, replace = TRUE, na.rm = TRUE))
+
+
+#display distribution of mean difference in insurance cost
+mean_d = abs(bmi_normal_mean - bmi_atrisk_mean)
+#95 % confidence interval
+
+UL <- quantile(mean_d$mean, 0.975)
+LL <- quantile(mean_d$mean, 0.025)
+
+cat("At 95 % confidence level, our estimate of the mean insurance cost is between", LL, "-", UL )
+
+
+ggplot(mean_d, aes(x = mean)) + geom_histogram(col = "darkblue", fill = "lightblue", binwidth = 10, na.rm =TRUE)+
+  geom_vline(xintercept = LL, color = "red", linetype = "dashed", size = 1) +
+  geom_vline(xintercept = UL, color = "red", linetype = "dashed", size = 1)+
+  xlab("Sample mean difference") + ylab("frequency")+
+  ggtitle("Distribution of sample mean for Charges between BMI normal and BMI at risk groups")
+```
+
+At 95 % confidence level, our estimate of the mean insurance cost is between 2161.963 - 4639.211
+
+The confidence interval is positive , which indicate that the insurance cost lies in the confidence interval. 
+
+
+QQ plot of the mean difference in insurance cost of individual with normal and at risk BMI levels: 
+
+```{r}
+qqnorm(mean_d$mean, main = "Normal Q-Q Plot of mean diffrence in insurance cost of BMI normal and BMI at risk groups")
+qqline(mean_d$mean, col = "red")
+```
+
+
